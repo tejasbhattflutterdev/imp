@@ -1,0 +1,88 @@
+import 'package:connectivity/connectivity.dart';
+
+class HomeController extends GetxController {
+  ConnCheckerController connController = Get.find<ConnCheckerController>();
+  TodosController todosController = Get.put(TodosController());
+  List<insert_todo_modal> tempTodoList = <insert_todo_modal>[].obs;
+  TodoRepository todoRepository = TodoRepository();
+
+  final storg = GetStorage();
+  late Connectivity _connectivity;
+
+  @override
+  void onInit() {
+    super.onInit();
+    _connectivity = Connectivity();
+    _connectivity.onConnectivityChanged.listen((ConnectivityResult result) {
+      if (result == ConnectivityResult.wifi || result == ConnectivityResult.mobile) {
+        insertDataWhenConnectionIsBack();
+      }
+    });
+  }
+
+  @override
+  void onReady() {
+    super.onReady();
+    connController.checkConnectivity();
+    connController.isConnected.value == true ? insertDataWhenConnectionIsBack() : logData();
+  }
+
+  logData() {
+    print('False is called');
+  }
+
+  @override
+  void onClose() {
+    super.onClose();
+  }
+
+  getAllTodoDetails() async {
+    List<insert_todo_modal> insertedList = await TodoSharedPrefStorage.getTodos();
+    tempTodoList = insertedList;
+  }
+
+  insertDataWhenConnectionIsBack() async {
+    if (tempTodoList.isNotEmpty) {
+      List<insert_todo_modal> insertedList = await TodoSharedPrefStorage.getTodos();
+      tempTodoList = insertedList;
+      callApiWhenConnectionIsBack(tempTodoList);
+      tempTodoList = [];
+    } else {
+      print('list is already empty');
+    }
+  }
+
+  callApiWhenConnectionIsBack(List<insert_todo_modal> myListTobeInserted) async {
+    final toDoPostHeader = {
+      'accept': 'application/json',
+      'Tra-ID': storg.read('trx_id'),
+      'Device-ID': 'mobile',
+      'Content-Type': 'application/json'
+    };
+
+    for (int i = 0; i < tempTodoList.length; i++) {
+      Map<String, dynamic> toDoPostData = {
+        "employee_id": storg.read('EmployeeId'),
+        "manager_id": 43,
+        "created_date": "2024-03-09",
+        "work": 'MY WORK$i',
+        "deadline": tempTodoList[i].deadline,
+        "completion_date": tempTodoList[i].completionDate,
+        "isdeleted": tempTodoList[i].isdeleted,
+        "reason": tempTodoList[i].reason,
+      };
+
+      await ApiCall.instance.restMainApi(
+        url: '/todo/insert',
+        restMethodType: MethodType.post,
+        onSuccess: (data) {
+          PersonalTodoResponse todoRes = PersonalTodoResponse.fromJson(data);
+          storg.write('TodoWorkId', todoRes.data![0].id);
+        },
+        mapHeader: toDoPostHeader,
+        apiData: toDoPostData,
+      );
+    }
+    await todosController.fetchPersonalTodo(id: storg.read('EmployeeId'));
+  }
+}
